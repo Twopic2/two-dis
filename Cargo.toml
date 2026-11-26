@@ -5,4 +5,9 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.104"
-tokio = { version = "1.53.3", features = ["full"] }
+console-subscriber = "0.5.0"
+log = "0.4.35"
+tokio = { version = "1.53.3", features = ["full", "tracing"] }
+
+[profile.release]
+debug = true

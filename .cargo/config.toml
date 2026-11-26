@@ -1,0 +1,15 @@
+[build]
+rustflags = ["--cfg", "tokio_unstable"]
+
+[target.x86_64-unknown-linux-gnu]
+# Target flags replace build.rustflags, so retain Tokio console instrumentation.
+# Rust's default lld linker needs --no-rosegment for accurate perf stack traces.
+rustflags = ["--cfg", "tokio_unstable", "-C", "link-arg=-Wl,--no-rosegment"]
+
+[alias]
+flame = [
+    "flamegraph",
+    "--bin", "two-dis",
+    "--output", "target/flamegraph.svg",
+    "--cmd", "record -e cpu-clock:u -F 997 --call-graph dwarf,64000 -g -o target/perf.data",
+]

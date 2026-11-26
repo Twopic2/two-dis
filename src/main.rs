@@ -1,12 +1,11 @@
-use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+use std::{sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+}, time::Duration};
 
 use anyhow::Error;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
-};
-use two_dis::protocal::RespFormatter;
-
+use tokio::{net::TcpListener, sync::Mutex};
+use two_dis::{server::hanlde_connection, storage::Storage};
 /*
     ! Note
 
@@ -16,43 +15,36 @@ use two_dis::protocal::RespFormatter;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    console_subscriber::init();
+
     let listener = TcpListener::bind("127.0.0.1:6379").await?;
+    
+    println!("Two-dis server initializing ---------");
+    println!("Redis server listening on {}", listener.local_addr()?);
+    println!("----------------------------------");
+
+    let main_storage = Arc::new(Mutex::new(
+        Storage::default()
+    ));
 
     let count = Arc::new(AtomicUsize::new(0));
     loop {
         match listener.accept().await {
             Ok((mut stream, _)) => {
                 let count = Arc::clone(&count);
-                let new_count =  count.fetch_add(1, Ordering::SeqCst);
+                let users = count.fetch_add(1, Ordering::Relaxed) + 1;
 
-                println!("accepted new connection {}", new_count);
+                println!("User connected | Concurrent users: {users}");
+                let value = main_storage.clone();
                 tokio::spawn(async move {
-                    hanlde_connection(&mut stream).await;
+                    hanlde_connection(&mut stream, value).await;
+                    
+                    let users = count.fetch_sub(1, Ordering::Relaxed) - 1;
+                    println!("User disconnected | Concurrent users: {users}");
                 });
             }
-
-            Err(_) => {
-                continue;
-            }
-        }
-    }
-}
-
-async fn hanlde_connection(stream: &mut TcpStream) {
-    let mut buffer = [0; 512];
-    let pong = RespFormatter::simple_string("PONG");
-
-    loop {
-        match stream.read(&mut buffer).await {
-            Ok(_) => {
-                println!("Received bytes: {:?}", buffer);
-
-                stream.write_all(pong.as_bytes()).await.unwrap();
-                stream.flush().await.unwrap();
-            }
-            Err(e) => {
-                println!("Error: {}", e);
-                break;
+            Err(error) => {
+                eprintln!("Connection error: {error}");
             }
         }
     }
